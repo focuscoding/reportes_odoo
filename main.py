@@ -19,10 +19,11 @@ date_start = definir_fecha_inicio.strftime('%Y-%m-%d')
 date_end = definir_fecha_fin.strftime('%Y-%m-%d')
 
 # Conexión Odoo
-url = 'https://drogueriablv.odoo.com'
-db = 'odoo-tecnored-drogueriablv-main-7701393'
-username = 'ahidalgo.blv@gmail.com'
-password = 'ahidalgo123'
+url = st.secrets["odoo"]["url"]
+db = st.secrets["odoo"]["db"]
+username = st.secrets["odoo"]["username"]
+password = st.secrets["odoo"]["password"]
+
 
 common = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/common')
 uid = common.authenticate(db, username, password, {})
