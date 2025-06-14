@@ -14,6 +14,14 @@ if definir_fecha_inicio > definir_fecha_fin:
     st.warning("⚠️ La fecha de inicio no puede ser posterior a la fecha de fin.")
     st.stop()
 
+# Selección de proveedor
+proveedores_opciones = ['Farmago', 'Leti', 'Calox', 'Oftalmi', 'Valmor', 'Megalabs', 'Santé']
+proveedores_seleccionados = st.multiselect("🏭 Selecciona uno o más proveedores:", proveedores_opciones, default=proveedores_opciones[:1])
+
+if not proveedores_seleccionados:
+    st.warning("⚠️ Debes seleccionar al menos un proveedor.")
+    st.stop()
+
 # Convirtiendo fechas a string formato Odoo
 date_start = definir_fecha_inicio.strftime('%Y-%m-%d')
 date_end = definir_fecha_fin.strftime('%Y-%m-%d')
@@ -23,7 +31,6 @@ url = st.secrets["odoo"]["url"]
 db = st.secrets["odoo"]["db"]
 username = st.secrets["odoo"]["username"]
 password = st.secrets["odoo"]["password"]
-
 
 common = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/common')
 uid = common.authenticate(db, username, password, {})
@@ -35,21 +42,20 @@ if not uid:
 models = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/object')
 st.success(f"✅ Conectado a Odoo con UID: {uid}")
 
-# Buscar facturas de Farmago en rango de fechas
-st.write(f"🔍 Buscando facturas de Farmago entre {date_start} y {date_end}...")
+# Buscar facturas por proveedor en rango de fechas
 facturas = models.execute_kw(db, uid, password,
     'account.move', 'search_read',
     [[
         ['move_type', '=', 'out_invoice'],
         ['invoice_date', '>=', date_start],
         ['invoice_date', '<=', date_end],
-        ['invoice_partner_display_name', 'ilike', 'Farmago']
+        ['invoice_partner_display_name', 'ilike', '|'.join(proveedores_seleccionados)]
     ]],
     {'fields': ['id', 'name', 'invoice_date', 'invoice_number_next',
                 'invoice_partner_display_name', 'os_currency_rate'], 'limit': 5000})
 
 if not facturas:
-    st.warning("❌ No se encontraron facturas de Farmago.")
+    st.warning("❌ No se encontraron facturas para los proveedores seleccionados.")
     st.stop()
 
 factura_ids = [f['id'] for f in facturas]
@@ -92,7 +98,7 @@ prod_template_dict = {pt['id']: pt['product_tmpl_id'][0] for pt in product_templ
 
 factura_dict = {f['id']: f for f in facturas}
 lineas_filtradas = []
-lab_claves = ['santé', 'leti', 'calox', 'oftalmi', 'valmor', 'megalabs']
+lab_claves = [p.lower() for p in proveedores_seleccionados]
 
 for linea in lineas:
     if not linea['product_id']:
@@ -123,22 +129,12 @@ if not lineas_filtradas:
     st.stop()
 
 df = pd.DataFrame(lineas_filtradas)
-df['Laboratorio_lower'] = df['Laboratorio'].str.lower().str.strip()
-proveedores_seleccionados = ['Oftalmi', 'Leti', 'Calox']
-proveedores_seleccionados = [p.lower() for p in proveedores_seleccionados]
-
-mask = df['Laboratorio_lower'].str.contains('|'.join(proveedores_seleccionados), na=False)
-df_filtrado = df[mask].drop(columns='Laboratorio_lower')
-
-if df_filtrado.empty:
-    st.warning("❌ No hay datos para los proveedores seleccionados.")
-    st.stop()
 
 st.write("📥 Datos filtrados por proveedor:")
-st.dataframe(df_filtrado)
+st.dataframe(df)
 
-for proveedor in df_filtrado['Laboratorio'].unique():
-    df_proveedor = df_filtrado[df_filtrado['Laboratorio'] == proveedor]
+for proveedor in df['Laboratorio'].unique():
+    df_proveedor = df[df['Laboratorio'] == proveedor]
     archivo_excel = f"facturas_{proveedor}.xlsx"
     df_proveedor.to_excel(archivo_excel, index=False)
     with open(archivo_excel, "rb") as file:
