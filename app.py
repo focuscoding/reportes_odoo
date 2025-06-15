@@ -15,7 +15,7 @@ if definir_fecha_inicio > definir_fecha_fin:
     st.stop()
 
 # Selección de proveedor
-proveedores_opciones = ['Farmago', 'Leti', 'Calox', 'Oftalmi', 'Valmor', 'Megalabs', 'Santé']
+proveedores_opciones = ['Leti', 'Calox', 'Oftalmi', 'Valmor', 'Megalabs', 'Santé']
 proveedores_seleccionados = st.multiselect("🏭 Selecciona uno o más proveedores:", proveedores_opciones, default=proveedores_opciones[:1])
 
 if not proveedores_seleccionados:
