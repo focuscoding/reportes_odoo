@@ -5,9 +5,6 @@ from datetime import datetime, timedelta
 from io import BytesIO
 import xmlrpc.client
 
-# Título de la app
-st.title("🧾 Generador de Reportes por Proveedor")
-
 
 # Conexión Odoo
 url = st.secrets["odoo"]["url"]
