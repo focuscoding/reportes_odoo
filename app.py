@@ -1,30 +1,13 @@
 import streamlit as st
-import xmlrpc.client
 import pandas as pd
-from datetime import date
+import base64
+from datetime import datetime, timedelta
+from io import BytesIO
+import xmlrpc.client
 
 # Título de la app
 st.title("🧾 Generador de Reportes por Proveedor")
 
-# Selección de fechas
-definir_fecha_inicio = st.date_input("📅 Fecha de inicio", value=date.today())
-definir_fecha_fin = st.date_input("📅 Fecha de fin", value=date.today())
-
-if definir_fecha_inicio > definir_fecha_fin:
-    st.warning("⚠️ La fecha de inicio no puede ser posterior a la fecha de fin.")
-    st.stop()
-
-# Selección de proveedor
-proveedores_opciones = ['Leti', 'Calox', 'Oftalmi', 'Valmor', 'Megalabs', 'Santé']
-proveedores_seleccionados = st.multiselect("🏭 Selecciona uno o más proveedores:", proveedores_opciones, default=proveedores_opciones[:1])
-
-if not proveedores_seleccionados:
-    st.warning("⚠️ Debes seleccionar al menos un proveedor.")
-    st.stop()
-
-# Convirtiendo fechas a string formato Odoo
-date_start = definir_fecha_inicio.strftime('%Y-%m-%d')
-date_end = definir_fecha_fin.strftime('%Y-%m-%d')
 
 # Conexión Odoo
 url = st.secrets["odoo"]["url"]
@@ -32,115 +15,88 @@ db = st.secrets["odoo"]["db"]
 username = st.secrets["odoo"]["username"]
 password = st.secrets["odoo"]["password"]
 
-common = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/common')
+# Autenticación con Odoo
+common = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/common")
 uid = common.authenticate(db, username, password, {})
+models = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/object")
 
-if not uid:
-    st.error("❌ No se pudo autenticar con Odoo.")
-    st.stop()
+# Función para obtener facturas
+def get_facturas(fecha_inicio, fecha_fin):
+    domain = [
+        ("invoice_date", ">=", fecha_inicio),
+        ("invoice_date", "<=", fecha_fin),
+        ("move_type", "=", "out_invoice"),
+        ("state", "=", "posted")
+    ]
 
-models = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/object')
-st.success(f"✅ Conectado a Odoo con UID: {uid}")
+    fields = [
+        "name", "invoice_date", "partner_id", "amount_total", "invoice_line_ids"
+    ]
 
-# Buscar facturas por proveedor en rango de fechas
-facturas = models.execute_kw(db, uid, password,
-    'account.move', 'search_read',
-    [[
-        ['move_type', '=', 'out_invoice'],
-        ['invoice_date', '>=', date_start],
-        ['invoice_date', '<=', date_end],
-        ['invoice_partner_display_name', 'ilike', '|'.join(proveedores_seleccionados)]
-    ]],
-    {'fields': ['id', 'name', 'invoice_date', 'invoice_number_next',
-                'invoice_partner_display_name', 'os_currency_rate'], 'limit': 5000})
+    facturas = models.execute_kw(
+        db, uid, password,
+        "account.move", "search_read",
+        [domain], {"fields": fields, "limit": 1000}
+    )
 
-if not facturas:
-    st.warning("❌ No se encontraron facturas para los proveedores seleccionados.")
-    st.stop()
+    # Obtener nombres de los clientes
+    for f in facturas:
+        f["partner_name"] = f["partner_id"][1] if f["partner_id"] else ""
 
-factura_ids = [f['id'] for f in facturas]
-lineas = models.execute_kw(db, uid, password,
-    'account.move.line', 'search_read',
-    [[['move_id', 'in', factura_ids]]],
-    {'fields': ['move_id', 'product_id', 'name', 'quantity',
-                'price_unit','price_subtotal', 'price_unit_rate',
-                'price_subtotal_rate','discount'], 'limit': 50000})
+    return pd.DataFrame(facturas)
 
-product_ids = list(set([l['product_id'][0] for l in lineas if l['product_id']]))
-batch_size = 500
-product_templates = []
+# Streamlit app
+st.set_page_config(layout="wide")
+st.title("Reporte de Facturas por Laboratorio")
 
-for i in range(0, len(product_ids), batch_size):
-    batch = product_ids[i:i+batch_size]
-    batch_templates = models.execute_kw(db, uid, password,
-        'product.product', 'read', [batch],
-        {'fields': ['id', 'product_tmpl_id']})
-    product_templates.extend(batch_templates)
+# Selección de fechas
+col1, col2 = st.columns(2)
+with col1:
+    fecha_inicio = st.date_input("Fecha de inicio", datetime.now() - timedelta(days=30))
+with col2:
+    fecha_fin = st.date_input("Fecha de fin", datetime.now())
 
-template_ids = list(set([pt['product_tmpl_id'][0] for pt in product_templates]))
-templates_data = []
-for i in range(0, len(template_ids), batch_size):
-    batch = template_ids[i:i+batch_size]
-    batch_data = models.execute_kw(db, uid, password,
-        'product.template', 'read', [batch],
-        {'fields': ['id', 'laboratory_name', 'default_code', 'supplier_code']})
-    templates_data.extend(batch_data)
+# Botón para cargar facturas
+if st.button("📥 Obtener facturas"):
+    with st.spinner("Obteniendo facturas desde Odoo..."):
+        df = get_facturas(fecha_inicio.strftime("%Y-%m-%d"), fecha_fin.strftime("%Y-%m-%d"))
 
-template_dict = {
-    pt['id']: {
-        'laboratorio': pt.get('laboratory_name', ''),
-        'codigo': pt.get('default_code', ''),
-        'codigo_proveedor': pt.get('supplier_code', ''),
-    } for pt in templates_data
-}
+    if df.empty:
+        st.error("❌ No se encontraron facturas en el rango de fechas indicado.")
+    else:
+        st.success(f"✅ {len(df)} facturas obtenidas.")
 
-prod_template_dict = {pt['id']: pt['product_tmpl_id'][0] for pt in product_templates}
+        # Entrada de texto para filtrar proveedores por coincidencia parcial
+        filtro_texto = st.text_input("🔍 Filtrar proveedores por nombre (parcial):")
 
-factura_dict = {f['id']: f for f in facturas}
-lineas_filtradas = []
-lab_claves = [p.lower() for p in proveedores_seleccionados]
+        if filtro_texto:
+            df_filtrado = df[df['partner_name'].str.contains(filtro_texto, case=False, na=False)]
+        else:
+            df_filtrado = df.copy()
 
-for linea in lineas:
-    if not linea['product_id']:
-        continue
-    product_id = linea['product_id'][0]
-    template_id = prod_template_dict.get(product_id)
-    lab_info = template_dict.get(template_id, {'laboratorio': '', 'codigo': '', 'codigo_proveedor': ''})
-    laboratorio = lab_info['laboratorio'][1].lower() if isinstance(lab_info['laboratorio'], list) else lab_info['laboratorio'].lower()
-    codigo = lab_info['codigo']
-    if any(clave in laboratorio for clave in lab_claves):
-        factura = factura_dict[linea['move_id'][0]]
-        lineas_filtradas.append({
-            'Fecha Factura': factura['invoice_date'],
-            'Cliente': factura['invoice_partner_display_name'],
-            'Nro. Factura': factura['invoice_number_next'],
-            'Código de Barras': codigo,
-            'Producto': linea['name'],
-            'Laboratorio': laboratorio.upper(),
-            'Código Laboratorio': lab_info['codigo_proveedor'],
-            'Cantidad': linea['quantity'],
-            'Precio Unitario': linea['price_unit'],
-            'Descuento': linea['discount'],
-            'Subtotal': linea['price_subtotal'],
-        })
+        proveedores_unicos = sorted(df_filtrado['partner_name'].dropna().unique())
+        seleccionados = st.multiselect("Selecciona uno o más proveedores:", proveedores_unicos)
 
-if not lineas_filtradas:
-    st.warning("❌ No hay líneas de factura que coincidan con los laboratorios seleccionados.")
-    st.stop()
+        if seleccionados:
+            df_filtrado = df_filtrado[df_filtrado['partner_name'].isin(seleccionados)]
 
-df = pd.DataFrame(lineas_filtradas)
+            if df_filtrado.empty:
+                st.error("❌ No se encontraron facturas para los proveedores seleccionados.")
+            else:
+                st.success(f"✅ {len(df_filtrado)} facturas encontradas para los proveedores seleccionados.")
+                st.dataframe(df_filtrado)
 
-st.write("📥 Datos filtrados por proveedor:")
-st.dataframe(df)
+                # Función para generar el enlace de descarga
+                def generar_enlace_descarga(df, nombre_archivo):
+                    output = BytesIO()
+                    df.to_excel(output, index=False, engine='openpyxl')
+                    output.seek(0)
+                    b64 = base64.b64encode(output.read()).decode()
+                    href = f'<a href="data:application/octet-stream;base64,{b64}" download="{nombre_archivo}">📤 Descargar archivo Excel</a>'
+                    return href
 
-for proveedor in df['Laboratorio'].unique():
-    df_proveedor = df[df['Laboratorio'] == proveedor]
-    archivo_excel = f"facturas_{proveedor}.xlsx"
-    df_proveedor.to_excel(archivo_excel, index=False)
-    with open(archivo_excel, "rb") as file:
-        st.download_button(
-            label=f"⬇️ Descargar Excel: {proveedor}",
-            data=file,
-            file_name=archivo_excel,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+                nombre_excel = f"facturas_filtradas_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+                st.markdown(generar_enlace_descarga(df_filtrado, nombre_excel), unsafe_allow_html=True)
+        else:
+            st.info("Selecciona al menos un proveedor para aplicar el filtro.")
+
