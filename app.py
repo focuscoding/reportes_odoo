@@ -7,6 +7,9 @@ import os
 
 st.title("📊 Reportes Farmago")
 st.header("📁 Reportes a proveedores")
+if "archivos_generados" not in st.session_state:
+    st.session_state.archivos_generados = []
+
 
 # Elegir proveedores
 st.subheader("Elegir Proveedores")
@@ -28,9 +31,10 @@ fecha_fin = st.date_input("Fecha fin", value=date(2025, 6, 6))
 fecha_inicio_str = fecha_inicio.strftime('%Y-%m-%d')
 fecha_fin_str = fecha_fin.strftime('%Y-%m-%d')
 
-if st.button("Generar Reporte"):
+
+if st.button("Generar Reportes"):
     archivos_generados = []
-    st.session_state.archivos_generados = []
+    
 
     # Conexión Odoo
     url = st.secrets["odoo"]["url"]
@@ -170,7 +174,7 @@ if st.button("Generar Reporte"):
 
             # Fórmulas y formatos
             for row in range(1, len(df_proveedor) + 1):
-                worksheet.write_formula(row, col_l, f'=J{row + 1} * K{row + 1} / 100', money_format)
+                worksheet.write_formula(row, col_l, f'=J{row + 1} * K{row + 1}', money_format)
 
                 valor_i = df_proveedor.iloc[row - 1, col_i]
                 if pd.notnull(valor_i):
@@ -213,7 +217,8 @@ if st.button("Generar Reporte"):
                     max_len = max(df_proveedor[col].astype(str).map(len).max(), len(col)) + 2
                 worksheet.set_column(idx, idx, max_len)
 
-        archivos_generados.append(archivo_excel)
+        st.session_state.archivos_generados.append(archivo_excel)
+
       
       
     
@@ -227,5 +232,23 @@ if st.button("Generar Reporte"):
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key=str(uuid.uuid4())  # ▷ cada llamada obtiene un identificador único
             )
+    
+    
+if st.session_state.archivos_generados:
+    for i, fn in enumerate(st.session_state.archivos_generados):
+        with open(fn, 'rb') as f:
+            st.download_button(
+                f"📥 Descargar {fn}",
+                f,
+                fn,
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                key=f"dl_{i}"
+            )
+    if st.button("🧹 Limpiar archivos generados"):
+        st.session_state.archivos_generados = []
+    
+
+
+
 
             
