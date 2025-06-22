@@ -4,11 +4,31 @@ import xmlrpc.client
 from datetime import date
 import uuid
 import os
+import requests
+from io import BytesIO
+
+# URL de descarga directa del archivo de OneDrive
+onedrive_url = st.secrets["odoo"]["onedrive"]
+
+# Descargar el archivo
+response = requests.get(onedrive_url)
+panel_df = pd.read_excel(BytesIO(response.content), sheet_name=0)
+
+# Asegúrate de que las columnas necesarias estén presentes
+# Supongamos que las columnas son: B = 'Código de Barras', K = 'Descuento'
+panel_df = panel_df.rename(columns={
+    panel_df.columns[1]: 'Código de Barras',
+    panel_df.columns[10]: 'Descuento Panel'
+})
+
+
 
 st.title("📊 Reportes Farmago")
 st.header("📁 Reportes a proveedores")
 if "archivos_generados" not in st.session_state:
     st.session_state.archivos_generados = []
+
+
 
 
 # Elegir proveedores
@@ -128,10 +148,22 @@ if st.button("Generar Reportes"):
                 'Subtotal': linea['price_subtotal'],
             })
 
+    
+
     df = pd.DataFrame(lineas_filtradas)
     if df.empty:
         st.warning("❌ No hay datos después del filtro por proveedores.")
         st.stop()
+
+    #Conversiones
+    df['Código de Barras'] = df['Código de Barras'].astype(str)
+    panel_df['Código de Barras'] = panel_df['Código de Barras'].astype(str)
+
+    df = df.drop(columns=['Descuento'], errors='ignore')  # Eliminar si ya existe
+    df = df.merge(panel_df[['Código de Barras', 'Descuento Panel']], on='Código de Barras', how='left')
+    df.rename(columns={'Descuento Panel': 'Descuento'}, inplace=True)
+
+    
 
     def convertir_a_float(valor):
         if isinstance(valor, str):
@@ -142,6 +174,20 @@ if st.button("Generar Reportes"):
 
     for proveedor in df['Laboratorio'].unique():
         df_proveedor = df[df['Laboratorio'] == proveedor].copy()
+        orden_columnas = [
+            'Fecha Factura',
+            'Cliente',
+            'Nro. Factura',
+            'Código de Barras',
+            'Producto',
+            'Laboratorio',
+            'Código Laboratorio',
+            'Cantidad',
+            'Precio Unitario',
+            'Descuento',
+            'Subtotal'
+        ]
+        df_proveedor = df_proveedor[[col for col in orden_columnas if col in df_proveedor.columns]]
         archivo_excel = f'facturas_{proveedor}.xlsx'
         with pd.ExcelWriter(archivo_excel, engine='xlsxwriter') as writer:
             df_proveedor.to_excel(writer, sheet_name='Facturas Filtradas', index=False)
@@ -149,6 +195,11 @@ if st.button("Generar Reportes"):
             worksheet = writer.sheets['Facturas Filtradas']
 
             # Formatos
+
+            percent_format = workbook.add_format({
+                'num_format': '0%',  # o simplemente '0%' si no quieres decimales
+                'align': 'right'
+            })
             money_format = workbook.add_format({
                 'num_format': '_-* "Bs.S "* #,##0.00_-;-_* "Bs.S "* -#,##0.00_-;_-* "Bs.S "* "-"??_-;_-@_-',
                 'align': 'right'
@@ -166,6 +217,7 @@ if st.button("Generar Reportes"):
             })
 
             # Posiciones
+            col_j = df_proveedor.columns.get_loc('Descuento')
             col_i = df_proveedor.columns.get_loc('Precio Unitario')
             col_k = df_proveedor.columns.get_loc('Subtotal')
             col_l = len(df_proveedor.columns)  # Nueva columna "Monto NC"
@@ -182,7 +234,7 @@ if st.button("Generar Reportes"):
 
                 valor_k = df_proveedor.iloc[row - 1, col_k]
                 if pd.notnull(valor_k):
-                    worksheet.write_number(row, col_k, convertir_a_float(valor_k), money_format)
+                    worksheet.write_formula(row, col_k, f'=H{row + 1} * I{row + 1}', money_format)
 
             # Encabezados
             for col_idx, col_name in enumerate(df_proveedor.columns):
@@ -215,8 +267,9 @@ if st.button("Generar Reportes"):
                     max_len = max(len(col), len(max_len_str)) + 2
                 else:
                     max_len = max(df_proveedor[col].astype(str).map(len).max(), len(col)) + 2
+               
                 worksheet.set_column(idx, idx, max_len)
-
+            worksheet.set_column(9, 9, 12, percent_format)
         st.session_state.archivos_generados.append(archivo_excel)
 
       
