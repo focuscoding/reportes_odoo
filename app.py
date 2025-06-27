@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import xmlrpc.client
-from datetime import date
+from datetime import date, timedelta
 import uuid
 import os
 import requests
@@ -44,14 +44,15 @@ else:
 
 # Selección de fechas
 st.subheader("Seleccionar rango de fechas")
-fecha_inicio = st.date_input("Fecha inicio", value=date(2025, 6, 1))
-fecha_fin = st.date_input("Fecha fin", value=date(2025, 6, 6))
+hoy = date.today()
+fecha_inicio = st.date_input("Fecha inicio", value=hoy - timedelta(days=7))
+fecha_fin = st.date_input("Fecha fin", value=hoy - timedelta(days=1))
 
 # Convertir fechas a string
 fecha_inicio_str = fecha_inicio.strftime('%Y-%m-%d')
 fecha_fin_str = fecha_fin.strftime('%Y-%m-%d')
 
-
+usd_report = st.checkbox("💵 USD")
 if st.button("Generar Reportes"):
     archivos_generados = []
     
@@ -134,7 +135,7 @@ if st.button("Generar Reportes"):
         laboratorio = lab_info['laboratorio'][1].lower() if isinstance(lab_info['laboratorio'], list) else lab_info['laboratorio'].lower()
         if any(clave in laboratorio for clave in proveedores_seleccionados):
             factura = factura_dict[linea['move_id'][0]]
-            lineas_filtradas.append({
+            fila = {
                 'Fecha Factura': factura['invoice_date'],
                 'Cliente': factura['invoice_partner_display_name'],
                 'Nro. Factura': factura['invoice_number_next'],
@@ -146,9 +147,12 @@ if st.button("Generar Reportes"):
                 'Precio Unitario': linea['price_unit'],
                 'Descuento': linea['discount'],
                 'Subtotal': linea['price_subtotal'],
-            })
-
-    
+            }
+            if usd_report:
+                fila['Tasa Día'] = factura.get('os_currency_rate', None)
+            
+            lineas_filtradas.append(fila)
+  
 
     df = pd.DataFrame(lineas_filtradas)
     if df.empty:
@@ -185,7 +189,8 @@ if st.button("Generar Reportes"):
             'Cantidad',
             'Precio Unitario',
             'Descuento',
-            'Subtotal'
+            'Subtotal',
+            'Tasa Día'
         ]
         df_proveedor = df_proveedor[[col for col in orden_columnas if col in df_proveedor.columns]]
         archivo_excel = f'facturas_{proveedor}.xlsx'
@@ -239,6 +244,8 @@ if st.button("Generar Reportes"):
             # Encabezados
             for col_idx, col_name in enumerate(df_proveedor.columns):
                 worksheet.write(0, col_idx, col_name, header_format)
+
+            
 
             # Totales
             total_row = len(df_proveedor) + 1
@@ -304,4 +311,5 @@ if st.session_state.archivos_generados:
 # Hiperactualizado 22-06-2025
 
 
+            
             
