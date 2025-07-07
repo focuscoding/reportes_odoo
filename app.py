@@ -51,7 +51,7 @@ fecha_fin = st.date_input("Fecha fin", value=hoy - timedelta(days=1))
 # Convertir fechas a string
 fecha_inicio_str = fecha_inicio.strftime('%Y-%m-%d')
 fecha_fin_str = fecha_fin.strftime('%Y-%m-%d')
-debug = st.checkbox("🛠️ Activar Debug")
+# debug = st.checkbox("🛠️ Activar Debug")
 usd_report = st.checkbox("💵 USD")
 if st.button("Generar Reportes"):
     archivos_generados = []
