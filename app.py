@@ -51,7 +51,7 @@ fecha_fin = st.date_input("Fecha fin", value=hoy - timedelta(days=1))
 # Convertir fechas a string
 fecha_inicio_str = fecha_inicio.strftime('%Y-%m-%d')
 fecha_fin_str = fecha_fin.strftime('%Y-%m-%d')
-
+debug = st.checkbox("🛠️ Activar Debug")
 usd_report = st.checkbox("💵 USD")
 if st.button("Generar Reportes"):
     archivos_generados = []
@@ -146,14 +146,14 @@ if st.button("Generar Reportes"):
                 'Cantidad': linea['quantity'],
                 'Precio Unitario': linea['price_unit'],
                 'Descuento': linea['discount'],
-                'Subtotal': linea['price_subtotal'],
+                # 'Subtotal': linea['price_subtotal'], 
             }
             if usd_report:
                 fila['Tasa Día'] = factura.get('os_currency_rate', None)
             
             lineas_filtradas.append(fila)
   
-
+    
     df = pd.DataFrame(lineas_filtradas)
     if df.empty:
         st.warning("❌ No hay datos después del filtro por proveedores.")
@@ -166,9 +166,7 @@ if st.button("Generar Reportes"):
     df = df.drop(columns=['Descuento'], errors='ignore')  # Eliminar si ya existe
     df = df.merge(panel_df[['Código de Barras', 'Descuento Panel']], on='Código de Barras', how='left')
     df.rename(columns={'Descuento Panel': 'Descuento'}, inplace=True)
-
-    
-
+   
     def convertir_a_float(valor):
         if isinstance(valor, str):
             return float(valor.replace(",", ""))
@@ -178,6 +176,14 @@ if st.button("Generar Reportes"):
 
     for proveedor in df['Laboratorio'].unique():
         df_proveedor = df[df['Laboratorio'] == proveedor].copy()
+        # Calcular y agregar columna Subtotal Monto NC al DataFrame
+        df_proveedor['Subtotal'] = None
+
+        df_proveedor['Monto NC'] = None
+        
+        if usd_report:
+            df_proveedor['Monto USD NC'] = None
+
         orden_columnas = [
             'Fecha Factura',
             'Cliente',
@@ -190,8 +196,29 @@ if st.button("Generar Reportes"):
             'Precio Unitario',
             'Descuento',
             'Subtotal',
-            'Tasa Día'
+            'Monto NC',
+            'Tasa Día',
+            'Monto USD NC'
         ]
+
+        if debug:
+            st.write("🧾 Reviso Monto NC")
+            st.dataframe(df.head(1))
+
+            st.write("🧬 Columnas")
+            st.write(df.columns.tolist())
+
+            import openpyxl
+            try:
+                wb = openpyxl.load_workbook(archivo_excel)
+                ws = wb.active
+                columnas_excel = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+                st.write("🔍 Columnas reales en el Excel generado:", columnas_excel)
+            except Exception as e:
+                st.error(f"❌ Error al leer columnas del Excel: {e}")
+
+
+
         df_proveedor = df_proveedor[[col for col in orden_columnas if col in df_proveedor.columns]]
         archivo_excel = f'facturas_{proveedor}.xlsx'
         with pd.ExcelWriter(archivo_excel, engine='xlsxwriter') as writer:
@@ -209,6 +236,10 @@ if st.button("Generar Reportes"):
                 'num_format': '_-* "Bs.S "* #,##0.00_-;-_* "Bs.S "* -#,##0.00_-;_-* "Bs.S "* "-"??_-;_-@_-',
                 'align': 'right'
             })
+            dollar_format = workbook.add_format({
+                'num_format': '_-* "$"* #,##0.00_-;-_* "$"* -#,##0.00_-;_-* "$"* "-"??_-;_-@_-',
+                'align': 'right'
+            })
             header_format = workbook.add_format({
                 'bold': True,
                 'align': 'center',
@@ -220,14 +251,22 @@ if st.button("Generar Reportes"):
                 'num_format': '_-* "Bs.S "* #,##0.00_-;-_* "Bs.S "* -#,##0.00_-;_-* "Bs.S "* "-"??_-;_-@_-',
                 'align': 'right'
             })
+            total_money_format = workbook.add_format({
+                'bold': True,
+                'num_format': '_-* "$"* #,##0.00_-;-_* "$"* -#,##0.00_-;_-* "$"* "-"??_-;_-@_-',
+                'align': 'right'
+            })
 
             # Posiciones
             col_j = df_proveedor.columns.get_loc('Descuento')
             col_i = df_proveedor.columns.get_loc('Precio Unitario')
             col_k = df_proveedor.columns.get_loc('Subtotal')
-            col_l = len(df_proveedor.columns)  # Nueva columna "Monto NC"
+            col_l = df_proveedor.columns.get_loc('Monto NC')
+            if 'Monto USD NC' in df_proveedor.columns:
+                col_n = df_proveedor.columns.get_loc('Monto USD NC')
+            # col_l = len(df_proveedor.columns)  # Nueva columna "Monto NC"
 
-            worksheet.write(0, col_l, 'Monto NC', header_format)
+            # worksheet.write(0, col_l, 'Monto NC', header_format)
 
             # Fórmulas y formatos
             for row in range(1, len(df_proveedor) + 1):
@@ -236,10 +275,19 @@ if st.button("Generar Reportes"):
                 valor_i = df_proveedor.iloc[row - 1, col_i]
                 if pd.notnull(valor_i):
                     worksheet.write_number(row, col_i, convertir_a_float(valor_i), money_format)
+                
+                worksheet.write_formula(row, col_k, f'=H{row + 1} * I{row + 1}', money_format)
+                if 'Monto USD NC' in df_proveedor.columns:
+                    worksheet.write_formula(row, col_n, f'=L{row + 1} / M{row + 1}', dollar_format)
 
-                valor_k = df_proveedor.iloc[row - 1, col_k]
-                if pd.notnull(valor_k):
-                    worksheet.write_formula(row, col_k, f'=H{row + 1} * I{row + 1}', money_format)
+
+                if usd_report and 'Tasa Día' in df_proveedor.columns:
+                    col_tasa = df_proveedor.columns.get_loc('Tasa Día')
+                    for row in range(1, len(df_proveedor) + 1):
+                        tasa = df_proveedor.iloc[row - 1, col_tasa]
+                        if pd.notnull(tasa):
+                            worksheet.write_number(row, col_tasa, convertir_a_float(tasa), money_format)
+
 
             # Encabezados
             for col_idx, col_name in enumerate(df_proveedor.columns):
@@ -253,17 +301,27 @@ if st.button("Generar Reportes"):
             worksheet.write_formula(total_row, 7, f'=SUM(H2:H{total_row})', total_format)
             worksheet.write(total_row, 10, 'Total NC', total_format)
             worksheet.write_formula(total_row, 11, f'=SUM(L2:L{total_row})', total_money_format)
+            if usd_report:
+                worksheet.write(total_row, 12, 'Total NC USD', total_format)
+                worksheet.write_formula(total_row, 13, f'=SUM(N2:N{total_row})', total_money_format)
 
             # Ajuste de ancho de columnas
-            columnas = list(df_proveedor.columns) + ['Monto NC']
+            columnas = list(df_proveedor.columns)
             for idx, col in enumerate(columnas):
-                if col in ['Precio Unitario', 'Subtotal', 'Monto NC']:
+                if col in ['Precio Unitario', 'Subtotal', 'Monto NC', 'Tasa Día', 'Monto USD NC']:
                     if col == 'Monto NC':
                         try:
-                            max_val = max(df_proveedor['Precio Unitario'].apply(convertir_a_float) * df_proveedor['Subtotal'].apply(convertir_a_float) / 100)
-                            max_len_str = f"Bs.S {max_val:,.2f}"
+                            total_monto_nc = (df_proveedor['Precio Unitario'].apply(convertir_a_float) * df_proveedor['Cantidad'].apply(convertir_a_float) * df_proveedor['Descuento'].apply(convertir_a_float)).sum()
+                            max_len_str = f"Bs.S {total_monto_nc:,.2f}"
                         except:
                             max_len_str = "Bs.S 0.00"
+                    elif col == 'Subtotal':
+                        try:
+                            max_subtotal = max(df_proveedor['Cantidad'].apply(convertir_a_float) * df_proveedor['Precio Unitario'].apply(convertir_a_float))
+                            # st.write(max_subtotal)
+                            max_len_str = f"Bs.S {max_subtotal:,.2f}"
+                        except:
+                            max_len_str = "Bs.S 0.00"        
                     else:
                         max_val = df_proveedor[col].apply(convertir_a_float).max()
                         max_len_str = f"Bs.S {max_val:,.2f}"
@@ -308,8 +366,7 @@ if st.session_state.archivos_generados:
         st.session_state.archivos_generados = []
     
 
-# Hiperactualizado 22-06-2025
-
+# Hiperactualizado 06/07/2025
 
             
             
