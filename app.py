@@ -1,11 +1,29 @@
 import streamlit as st
 import pandas as pd
 import xmlrpc.client
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 import uuid
 import os
 import requests
 from io import BytesIO
+import urllib.parse
+import json
+import pytz
+
+# Función para enviar datos a Google Sheets
+def enviar_a_google_sheets(data):
+    script_url = st.secrets["google"]["script_url"]
+    try:
+        response = requests.post(
+            script_url,
+            data=json.dumps(data),
+            headers={'Content-Type': 'application/json'}
+        )
+        return response.status_code == 200
+    except Exception as e:
+        st.error(f"Error al enviar a Google Sheets: {e}")
+        return False
+
 
 # URL de descarga directa del archivo de OneDrive
 onedrive_url = st.secrets["odoo"]["onedrive"]
@@ -28,7 +46,30 @@ st.header("📁 Reportes a proveedores")
 if "archivos_generados" not in st.session_state:
     st.session_state.archivos_generados = []
 
+ # 🔄 Diccionario de mapeo local solo para esta sección
+mapa_laboratorios = {
+    'LABORATORIOS LETI, S.A.V.': 'Leti',
+    'CALOX INTERNATIONAL, C.A.': 'Calox',
+    'MEGALABS VZL, C.A.': 'Megalabs',
+    'LABORATORIOS SIEGFRIED S.A.': 'Siegfried',
+    'LABORATORIOS VALMOR, C.A.': 'Valmor',
+    'LABORATORIOS L.O. OFTALMI, C.A': 'Oftalmi',
+    'LABORATORIOS LA SANTÉ C,A.': 'Sante',
+}
 
+
+# Diccionario de destinatarios por laboratorio
+correos_cc_global = ['staddeo@drogueriablv.com', 'kmontero@drogueriablv.com']
+emails_por_laboratorio = {
+    'sante': ['maria.herrera@pharmetiquelabs.com.ve'],
+    'leti': ['asdrubal.mosqueda@grupoleti.com','miller.guerra@grupoleti.com',],
+    'calox': ['dmartinez@calox.com'],
+    'oftalmi': ['gerente.mercadeo@oftalmi.com','gerente.caracas@oftalmi.com','lourdes.defreitas@oftalmi.com'],
+    'valmor': ['dvaleri@valmorca.com.ve'],
+    'megalabs': ['ytorres@megalabs.com.ve','Vcampos@megalabs.com.ve','Gmolinaro@megalabs.com.ve',
+                 'CPerez@megalabs.com.ve','Atencionalcliente@megalabs.com.ve','SRosario@megalabs.com.ve'],
+    'siegfried': ['drosales@siegfried.com.ve','psojo@siegfried.com.ve','asuarez@siegfried.com.ve'],
+}
 
 
 # Elegir proveedores
@@ -47,6 +88,9 @@ st.subheader("Seleccionar rango de fechas")
 hoy = date.today()
 fecha_inicio = st.date_input("Fecha inicio", value=hoy - timedelta(days=7))
 fecha_fin = st.date_input("Fecha fin", value=hoy - timedelta(days=1))
+
+fecha_inicio_legible = fecha_inicio.strftime('%d-%m-%Y')
+fecha_fin_legible = fecha_fin.strftime('%d-%m-%Y')
 
 # Convertir fechas a string
 fecha_inicio_str = fecha_inicio.strftime('%Y-%m-%d')
@@ -155,6 +199,7 @@ if st.button("Generar Reportes"):
   
     
     df = pd.DataFrame(lineas_filtradas)
+    st.session_state.df = df
     if df.empty:
         st.warning("❌ No hay datos después del filtro por proveedores.")
         st.stop()
@@ -175,6 +220,9 @@ if st.button("Generar Reportes"):
         return 0.0
 
     for proveedor in df['Laboratorio'].unique():
+        nombre_normalizado = mapa_laboratorios.get(proveedor, proveedor)
+        df_proveedor = df[df['Laboratorio'] == proveedor].copy()
+        
         df_proveedor = df[df['Laboratorio'] == proveedor].copy()
         # Calcular y agregar columna Subtotal Monto NC al DataFrame
         df_proveedor['Subtotal'] = None
@@ -201,26 +249,26 @@ if st.button("Generar Reportes"):
             'Monto USD NC'
         ]
 
-        if debug:
-            st.write("🧾 Reviso Monto NC")
-            st.dataframe(df.head(1))
+        # if debug:
+        #     st.write("🧾 Reviso Monto NC")
+        #     st.dataframe(df.head(1))
 
-            st.write("🧬 Columnas")
-            st.write(df.columns.tolist())
+        #     st.write("🧬 Columnas")
+        #     st.write(df.columns.tolist())
 
-            import openpyxl
-            try:
-                wb = openpyxl.load_workbook(archivo_excel)
-                ws = wb.active
-                columnas_excel = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
-                st.write("🔍 Columnas reales en el Excel generado:", columnas_excel)
-            except Exception as e:
-                st.error(f"❌ Error al leer columnas del Excel: {e}")
+        # import openpyxl
+        #     try:
+        #         wb = openpyxl.load_workbook(archivo_excel)
+        #         ws = wb.active
+        #         columnas_excel = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+        #         st.write("🔍 Columnas reales en el Excel generado:", columnas_excel)
+        #     except Exception as e:
+        #         st.error(f"❌ Error al leer columnas del Excel: {e}")
 
 
 
         df_proveedor = df_proveedor[[col for col in orden_columnas if col in df_proveedor.columns]]
-        archivo_excel = f'facturas_{proveedor}.xlsx'
+        archivo_excel = f'{nombre_normalizado} - Ventas a Farmago del {fecha_inicio_legible} al {fecha_fin_legible}.xlsx'
         with pd.ExcelWriter(archivo_excel, engine='xlsxwriter') as writer:
             df_proveedor.to_excel(writer, sheet_name='Facturas Filtradas', index=False)
             workbook = writer.book
@@ -251,7 +299,7 @@ if st.button("Generar Reportes"):
                 'num_format': '_-* "Bs.S "* #,##0.00_-;-_* "Bs.S "* -#,##0.00_-;_-* "Bs.S "* "-"??_-;_-@_-',
                 'align': 'right'
             })
-            total_money_format = workbook.add_format({
+            total_usd_format = workbook.add_format({
                 'bold': True,
                 'num_format': '_-* "$"* #,##0.00_-;-_* "$"* -#,##0.00_-;_-* "$"* "-"??_-;_-@_-',
                 'align': 'right'
@@ -298,13 +346,13 @@ if st.button("Generar Reportes"):
             # Totales
             total_row = len(df_proveedor) + 1
             worksheet.write(total_row, 6, 'Total Unidades', total_format)
-            worksheet.write_formula(total_row, 7, f'=SUM(H2:H{total_row})', total_format)
-            worksheet.write(total_row, 10, 'Total NC', total_format)
-            worksheet.write_formula(total_row, 11, f'=SUM(L2:L{total_row})', total_money_format)
+            worksheet.write_formula(total_row, 7, f'=SUM(H2:H{total_row})', total_format)          
             if usd_report:
                 worksheet.write(total_row, 12, 'Total NC USD', total_format)
-                worksheet.write_formula(total_row, 13, f'=SUM(N2:N{total_row})', total_money_format)
-
+                worksheet.write_formula(total_row, 13, f'=SUM(N2:N{total_row})', total_usd_format)
+            else:
+                worksheet.write(total_row, 10, 'Total NC', total_format)
+                worksheet.write_formula(total_row, 11, f'=SUM(L2:L{total_row})', total_money_format)
             # Ajuste de ancho de columnas
             columnas = list(df_proveedor.columns)
             for idx, col in enumerate(columnas):
@@ -335,10 +383,45 @@ if st.button("Generar Reportes"):
                
                 worksheet.set_column(idx, idx, max_len)
             worksheet.set_column(9, 9, 12, percent_format)
-        st.session_state.archivos_generados.append(archivo_excel)
 
-      
-      
+        # =============================================
+        # NUEVO CÓDIGO PARA ENVIAR A GOOGLE SHEETS
+        # =============================================
+        # Calcular montos para Google Sheets
+        df_excel = pd.read_excel(archivo_excel, sheet_name='Facturas Filtradas')
+
+        if usd_report:
+            # Extraer el TOTAL de la última fila (columna 'Monto USD NC')
+            monto_usd = df_excel.iloc[-1]['Monto USD NC']  # Última fila, columna N
+            monto_bs = None
+            
+        else:
+            monto_bs = (df_proveedor['Precio Unitario'].apply(convertir_a_float) * 
+                       df_proveedor['Cantidad'].apply(convertir_a_float) * 
+                       df_proveedor['Descuento'].apply(convertir_a_float)).sum()
+            monto_usd = None
+        
+        # Preparar datos para enviar
+        data = {
+            "laboratorio": nombre_normalizado,
+            "mes": fecha_fin.strftime("%B %Y").capitalize(),  # "Julio 2025"
+            "concepto": f"Ventas Farmago del {fecha_inicio_legible} al {fecha_fin_legible}",
+            "monto_bs": monto_bs,
+            "monto_usd": monto_usd
+        }
+        
+        # Enviar datos a Google Sheets
+        if enviar_a_google_sheets(data):
+            st.success(f"Datos de {nombre_normalizado} enviados a Google Sheets")
+        else:
+            st.warning(f"No se pudo enviar datos de {nombre_normalizado} a Google Sheets")
+        # =============================================
+        # FIN DEL NUEVO CÓDIGO
+        # =============================================
+            
+        st.session_state.archivos_generados.append(archivo_excel)
+ 
+    
     
     st.success('✅ Archivos generados correctamente')
     for fn in archivos_generados:
@@ -350,8 +433,61 @@ if st.button("Generar Reportes"):
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key=str(uuid.uuid4())  # ▷ cada llamada obtiene un identificador único
             )
-    
-    
+
+# st.write("📊 Debug - ¿Existe df en session_state?:", "df" in st.session_state)
+# if "df" in st.session_state:
+#     st.write("🔍 Columnas de df:", st.session_state.df.columns.tolist())
+#     st.write("🔬 Valores únicos de Laboratorio:", st.session_state.df['Laboratorio'].unique().tolist())
+
+
+st.subheader("✉️ Correos sugeridos por proveedor")
+
+if "mostrar_correos" not in st.session_state:
+    st.session_state.mostrar_correos = False
+
+# Botón que activa la visualización de correos
+if st.button("Armar correos"):
+    st.session_state.mostrar_correos = True
+
+# Mostrar correos solo si ya se generó el DataFrame
+if "df" in st.session_state and not st.session_state.df.empty:
+        df = st.session_state.df
+     
+        # 🔁 Generar correos usando nombres normalizados
+        for lab_original in df['Laboratorio'].unique():
+            nombre_normalizado = mapa_laboratorios.get(lab_original, lab_original)
+            nombre_clave = nombre_normalizado.strip().lower()
+
+            if nombre_clave in emails_por_laboratorio:
+                emails = emails_por_laboratorio[nombre_clave]
+                titulo = f"{nombre_normalizado} - Ventas a Farmago del {fecha_inicio_legible} al {fecha_fin_legible}"
+                cuerpo = f"""Buen día, estimados. Espero se encuentren bien.
+
+Envío el reporte de ventas a Farmago durante el período indicado.
+
+¡Saludos!"""
+
+        # Codificar texto para URL
+                subject = urllib.parse.quote(titulo)
+                body = urllib.parse.quote(cuerpo)
+                to = ",".join(emails)
+                cc = ",".join(correos_cc_global)  # NUEVO
+
+                mailto_link = f"mailto:{to}?cc={cc}&subject={subject}&body={body}"
+
+                st.markdown(f"📨 [Redactar correo {nombre_normalizado}]({mailto_link})", unsafe_allow_html=True)
+            #     st.write("📨 Enlace generado:", mailto_link)
+
+            #     st.markdown(f"### 📧 Correo para {nombre_normalizado}")
+            #     st.write("**Destinatarios:**", ", ".join(emails))
+            #     st.write("**Asunto:**", titulo)
+            #     st.text_area("Cuerpo del correo", cuerpo, height=150, key=f"cuerpo_{nombre_clave}")
+            else:
+                st.warning(f"⚠️ No se encontró correo para el laboratorio: {lab_original}")
+elif st.session_state.mostrar_correos:  # <- Este chequeo extra evita mensaje prematuro
+    st.info("⚠️ Primero debes generar los reportes para armar los correos.")
+
+
 if st.session_state.archivos_generados:
     for i, fn in enumerate(st.session_state.archivos_generados):
         with open(fn, 'rb') as f:
@@ -364,7 +500,8 @@ if st.session_state.archivos_generados:
             )
     if st.button("🧹 Limpiar archivos generados"):
         st.session_state.archivos_generados = []
-    
+
+
 
 # Hiperactualizado 06/07/2025
 
