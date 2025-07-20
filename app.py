@@ -10,21 +10,61 @@ import urllib.parse
 import json
 import pytz
 
+
 # Función para enviar datos a Google Sheets
 def enviar_a_google_sheets(data):
     script_url = st.secrets["google"]["script_url"]
+    
     try:
+        # Validar URL
+        if not script_url.startswith("https://script.google.com/macros/s/"):
+            st.error("URL de Google Apps Script inválida")
+            return False
+        
+        # Preparar payload con estructura que espera el Google Script
+        payload = {
+            "action": "append_data",  # Asegúrate que coincida con lo que espera tu Google Script
+            "data": {
+                "laboratorio": str(data.get("laboratorio", "")),
+                "mes": str(data.get("mes", "")),
+                "concepto": str(data.get("concepto", "")),
+                "monto_bs": float(data.get("monto_bs", 0)) if data.get("monto_bs") is not None else 0,
+                "monto_usd": float(data.get("monto_usd", 0)) if data.get("monto_usd") is not None else 0
+            }
+        }
+        
+        # Configurar request con verificación más estricta
         response = requests.post(
             script_url,
-            data=json.dumps(data),
-            headers={'Content-Type': 'application/json'}
+            json=payload,  # Usar json= para auto-conversión
+            timeout=15
         )
-        return response.status_code == 200
+        
+        # Verificar respuesta más exhaustivamente
+        if response.status_code == 200:
+            try:
+                response_data = response.json()
+                if response_data.get("success"):
+                    return True
+                else:
+                    st.error(f"Error en Google Sheets: {response_data.get('error', 'Error desconocido')}")
+                    return False
+            except ValueError:
+                st.error("La respuesta no es JSON válido")
+                return False
+        else:
+            st.error(f"Error HTTP {response.status_code}: {response.text}")
+            return False
+            
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error de conexión: {str(e)}")
+        return False
     except Exception as e:
-        st.error(f"Error al enviar a Google Sheets: {e}")
+        st.error(f"Error inesperado: {str(e)}")
         return False
 
-
+    
+    
 # URL de descarga directa del archivo de OneDrive
 onedrive_url = st.secrets["odoo"]["onedrive"]
 
@@ -388,33 +428,74 @@ if st.button("Generar Reportes"):
         # NUEVO CÓDIGO PARA ENVIAR A GOOGLE SHEETS
         # =============================================
         # Calcular montos para Google Sheets
-        df_excel = pd.read_excel(archivo_excel, sheet_name='Facturas Filtradas')
-
+            
         if usd_report:
-            # Extraer el TOTAL de la última fila (columna 'Monto USD NC')
-            monto_usd = df_excel.iloc[-1]['Monto USD NC']  # Última fila, columna N
+            # Calcular el monto USD directamente en Python
+            monto_usd = (
+                df_proveedor['Precio Unitario'].apply(convertir_a_float) * 
+                df_proveedor['Cantidad'].apply(convertir_a_float) * 
+                df_proveedor['Descuento'].apply(convertir_a_float) / 
+                df_proveedor['Tasa Día'].apply(convertir_a_float)
+            ).sum()
             monto_bs = None
             
+            # Debug opcional
+            st.write(f"🔢 Monto USD calculado: {monto_usd:.2f}")
         else:
-            monto_bs = (df_proveedor['Precio Unitario'].apply(convertir_a_float) * 
-                       df_proveedor['Cantidad'].apply(convertir_a_float) * 
-                       df_proveedor['Descuento'].apply(convertir_a_float)).sum()
+            monto_bs = (
+                df_proveedor['Precio Unitario'].apply(convertir_a_float) * 
+                df_proveedor['Cantidad'].apply(convertir_a_float) * 
+                df_proveedor['Descuento'].apply(convertir_a_float)
+            ).sum()
             monto_usd = None
-        
-        # Preparar datos para enviar
+            
+            
+        # Preparar datos para Google Sheets (igual que antes)
+
+        meses_es = {
+            'January': 'Enero', 'February': 'Febrero', 'March': 'Marzo',
+            'April': 'Abril', 'May': 'Mayo', 'June': 'Junio',
+            'July': 'Julio', 'August': 'Agosto', 'September': 'Septiembre',
+            'October': 'Octubre', 'November': 'Noviembre', 'December': 'Diciembre'
+        }
+
+        mes_ingles = fecha_fin.strftime("%B")  # "July"
+        mes_espanol = meses_es.get(mes_ingles, mes_ingles)
+
+
+
+
         data = {
             "laboratorio": nombre_normalizado,
-            "mes": fecha_fin.strftime("%B %Y").capitalize(),  # "Julio 2025"
+            "mes": f"{mes_espanol} {fecha_fin.strftime('%Y')}",
             "concepto": f"Ventas Farmago del {fecha_inicio_legible} al {fecha_fin_legible}",
-            "monto_bs": monto_bs,
-            "monto_usd": monto_usd
+            "monto_bs": round(monto_bs, 2) if monto_bs is not None else None,  # Redondeo a 2 decimales
+            "monto_usd": round(monto_usd, 2) if monto_usd is not None else None
         }
-        
-        # Enviar datos a Google Sheets
+
+        # Prepara el payload que se enviará (para debug)
+        payload_debug = {
+            "action": "append_data",
+            "data": data
+        }
+
+        # Debug: mostrar payload antes de enviar
+        with st.expander("Ver datos a enviar a Google Sheets"):
+            st.write("Payload completo:")
+            st.write(payload_debug)
+            st.write("Datos calculados:")
+            st.write(f"Monto Bs: {monto_bs if monto_bs is not None else 'N/A'}")
+            st.write(f"Monto USD: {monto_usd if monto_usd is not None else 'N/A'}")
+
+        # Enviar a Google Sheets con verificación mejorada
         if enviar_a_google_sheets(data):
-            st.success(f"Datos de {nombre_normalizado} enviados a Google Sheets")
+            st.success(f"✅ Datos de {nombre_normalizado} enviados a Google Sheets")
+            st.success(f"📊 Monto {'USD' if usd_report else 'Bs.'}: {monto_usd if usd_report else monto_bs:,.2f}")
+            
         else:
-            st.warning(f"No se pudo enviar datos de {nombre_normalizado} a Google Sheets")
+            st.error(f"❌ Falló el envío de datos de {nombre_normalizado}")
+
+
         # =============================================
         # FIN DEL NUEVO CÓDIGO
         # =============================================
