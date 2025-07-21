@@ -469,8 +469,8 @@ if st.button("Generar Reportes"):
             "laboratorio": nombre_normalizado,
             "mes": f"{mes_espanol} {fecha_fin.strftime('%Y')}",
             "concepto": f"Ventas Farmago del {fecha_inicio_legible} al {fecha_fin_legible}",
-            "monto_bs": round(monto_bs, 2) if monto_bs is not None else None,  # Redondeo a 2 decimales
-            "monto_usd": round(monto_usd, 2) if monto_usd is not None else None
+            "monto_bs": float(monto_bs) if monto_bs is not None else None,  # Conversión explícita
+            "monto_usd": float(monto_usd) if monto_usd is not None else None  # Conversión explícita
         }
 
         # Prepara el payload que se enviará (para debug)
@@ -480,12 +480,27 @@ if st.button("Generar Reportes"):
         }
 
         # Debug: mostrar payload antes de enviar
-        with st.expander("Ver datos a enviar a Google Sheets"):
+        with st.expander("🔍 Ver datos a enviar a Google Sheets (DEBUG)"):
             st.write("Payload completo:")
             st.write(payload_debug)
+            st.write("Tipos de datos en el payload:")
+            st.write({
+                "laboratorio": type(payload_debug["data"]["laboratorio"]),
+                "mes": type(payload_debug["data"]["mes"]),
+                "concepto": type(payload_debug["data"]["concepto"]),
+                "monto_bs": type(payload_debug["data"]["monto_bs"]),
+                "monto_usd": type(payload_debug["data"]["monto_usd"])
+            })
+            
             st.write("Datos calculados:")
-            st.write(f"Monto Bs: {monto_bs if monto_bs is not None else 'N/A'}")
-            st.write(f"Monto USD: {monto_usd if monto_usd is not None else 'N/A'}")
+            st.write(f"Monto Bs: {monto_bs if monto_bs is not None else 'N/A'} (Tipo: {type(monto_bs)})")
+            st.write(f"Monto USD: {monto_usd if monto_usd is not None else 'N/A'} (Tipo: {type(monto_usd)})")
+            
+            # Verificación explícita si son strings
+            if isinstance(monto_bs, str):
+                st.warning("⚠️ monto_bs es un string cuando debería ser numérico")
+            if isinstance(monto_usd, str):
+                st.warning("⚠️ monto_usd es un string cuando debería ser numérico")
 
         # Enviar a Google Sheets con verificación mejorada
         if enviar_a_google_sheets(data):
