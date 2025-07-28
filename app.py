@@ -25,7 +25,7 @@ def enviar_a_google_sheets(data):
         payload = {
             "action": "append_data",  # Asegúrate que coincida con lo que espera tu Google Script
             "data": {
-                "laboratorio": str(data.get("laboratorio", "")),
+                        "laboratorio": str(data.get("laboratorio", "")),
                 "mes": str(data.get("mes", "")),
                 "concepto": str(data.get("concepto", "")),
                 "monto_bs": float(data.get("monto_bs", 0)) if data.get("monto_bs") is not None else 0,
