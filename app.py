@@ -79,7 +79,7 @@ panel_df = panel_df.rename(columns={
     panel_df.columns[10]: 'Descuento Panel'
 })
 
-st.image("./logo/shakira_pc.jpeg", use_container_width=True )
+# st.image("./logo/shakira_pc.jpeg", use_container_width=True )
 
 st.title("📊 Reportes Farmago")
 st.header("📁 Reportes a proveedores")
