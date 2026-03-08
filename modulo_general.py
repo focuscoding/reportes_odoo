@@ -511,7 +511,7 @@ def render_reporte(fecha_inicio, fecha_fin):
             else:
                 with st.spinner("Enviando datos..."):
                     ok, errores = enviar_a_sheets(
-                        df_display, fecha_inicio, fecha_fin, apps_url, config_costos=st.session_state.config_costos_aplicada 
+                        df_display, fecha_inicio, fecha_fin, apps_url, config_costos=st.session_state.config_costos
                     )
                 if ok:
                     st.success(f"✅ Enviados: {', '.join(ok)}")
