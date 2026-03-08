@@ -393,11 +393,6 @@ def render_reporte(fecha_inicio, fecha_fin):
                     supplier_partner_ids = df_costs['supplier_partner_id'].dropna().astype(int).unique().tolist()
                     data_suppliers = client.search_read('res.partner', [('id', 'in', supplier_partner_ids)], ['id', 'comment'])
                     df_suppliers = pd.DataFrame(data_suppliers).rename(columns={'id': 'supplier_partner_id'})
-
-                    st.session_state.debug_suppliers = df_suppliers.head(10).to_dict()
-                    st.session_state.debug_supplier_ids = supplier_partner_ids[:10]
-
-                    
                     df_costs = df_costs.merge(df_suppliers, on='supplier_partner_id', how='left')
                 
                 
@@ -466,7 +461,6 @@ def render_reporte(fecha_inicio, fecha_fin):
                     'descuento_valor': df_final['descuento_valor'] if 'descuento_valor' in df_final else 0,
                     'currency_id': df_final['currency_id'].apply(limpiar)
                 })
-                st.write("DEBUG comment muestra:", res['comment'].head(5).tolist())
 
                 st.session_state.df_resultado = res
                 st.session_state.tipo_reporte_activo = tipo_reporte
@@ -515,9 +509,6 @@ def render_reporte(fecha_inicio, fecha_fin):
                 st.rerun()
 
         st.dataframe(df_display, use_container_width=True)
-        if 'debug_suppliers' in st.session_state:
-            st.write("DEBUG df_suppliers muestra:", df_suppliers.head(10))
-            st.write("DEBUG supplier_partner_ids:", supplier_partner_ids[:10])
         
         st.divider()
         st.subheader("📤 Enviar resumen a Google Sheets")
