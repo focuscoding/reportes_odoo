@@ -9,19 +9,20 @@ import requests
 
 # --- FUNCIONES DE SOPORTE ---
 
-def enviar_a_sheets(df_display, fecha_inicio, fecha_fin, apps_script_url):
+def enviar_a_sheets(df_display, fecha_inicio, fecha_fin, apps_script_url, config_costos=None):
+    config_costos = config_costos or {}
     CADENAS_PRECIO_FULL = ['farmago', 'farmatención']
     concepto = f"SELL-OUT del {fecha_inicio.strftime('%d/%m/%Y')} al {fecha_fin.strftime('%d/%m/%Y')}"
+    
     meses_es = {
-    'January': 'Enero', 'February': 'Febrero', 'March': 'Marzo',
-    'April': 'Abril', 'May': 'Mayo', 'June': 'Junio',
-    'July': 'Julio', 'August': 'Agosto', 'September': 'Septiembre',
-    'October': 'Octubre', 'November': 'Noviembre', 'December': 'Diciembre'
+        'January': 'Enero', 'February': 'Febrero', 'March': 'Marzo',
+        'April': 'Abril', 'May': 'Mayo', 'June': 'Junio',
+        'July': 'Julio', 'August': 'Agosto', 'September': 'Septiembre',
+        'October': 'Octubre', 'November': 'Noviembre', 'December': 'Diciembre'
     }
     mes_en = fecha_inicio.strftime('%B')
     mes = f"{meses_es.get(mes_en, mes_en)} {fecha_inicio.strftime('%Y')}"
-    
-    # Recalcular total_descuento igual que el motor
+
     df = df_display.copy()
     for col in ['quantity', 'price_unit', 'costo_laboratorio', 'descuento_valor']:
         if col in df.columns:
@@ -29,29 +30,35 @@ def enviar_a_sheets(df_display, fecha_inicio, fecha_fin, apps_script_url):
 
     tipo_activo = st.session_state.get('tipo_reporte_activo', '')
 
-    def calcular_precio_fila(row):
-        if tipo_activo == 'SELL-OUT':
-            cadena = str(row.get('cadena', '')).lower().strip()
-            es_cadena_full = any(c in cadena for c in CADENAS_PRECIO_FULL)
-            if es_cadena_full:
-                return row['price_unit']
-            else:
-                descuento = row['descuento_valor']
-                if descuento >= 1 or descuento < 0:
-                    return row['price_unit']
-                return row['price_unit'] / (1 - descuento)
-        return row['price_unit']
-
-    df['valor_calculado'] = df.apply(calcular_precio_fila, axis=1)
-    df['subtotal_bruto'] = df['quantity'] * df['valor_calculado']
-    df['total_descuento'] = df['subtotal_bruto'] * df['descuento_valor']
-
     resultados = []
     errores = []
 
     labs = df['laboratory_name'].unique()
     for lab in labs:
-        df_lab = df[df['laboratory_name'] == lab]
+        df_lab = df[df['laboratory_name'] == lab].copy()
+        es_a_costo = config_costos.get(lab, False)
+
+        # Misma lógica que motor_split_laboratorios
+        if es_a_costo:
+            df_lab['valor_calculado'] = df_lab['costo_laboratorio']
+        else:
+            if tipo_activo == 'SELL-OUT':
+                def calcular_precio_fila(row):
+                    cadena = str(row['cadena']).lower().strip()
+                    es_cadena_full = any(c in cadena for c in CADENAS_PRECIO_FULL)
+                    if es_cadena_full:
+                        return row['price_unit']
+                    descuento = row['descuento_valor']
+                    if descuento >= 1 or descuento < 0:
+                        return row['price_unit']
+                    return row['price_unit'] / (1 - descuento)
+                df_lab['valor_calculado'] = df_lab.apply(calcular_precio_fila, axis=1)
+            else:
+                df_lab['valor_calculado'] = df_lab['price_unit']
+
+        df_lab['subtotal_bruto'] = df_lab['quantity'] * df_lab['valor_calculado']
+        df_lab['total_descuento'] = df_lab['subtotal_bruto'] * df_lab['descuento_valor']
+
         moneda = str(df_lab['currency_id'].iloc[0]).lower().strip()
         total = df_lab['total_descuento'].sum()
 
