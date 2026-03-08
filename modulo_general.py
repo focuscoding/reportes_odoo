@@ -453,7 +453,8 @@ def render_reporte(fecha_inicio, fecha_fin):
                     'descuento_valor': df_final['descuento_valor'] if 'descuento_valor' in df_final else 0,
                     'currency_id': df_final['currency_id'].apply(limpiar)
                 })
-                
+                st.write("DEBUG comment muestra:", res['comment'].head(5).tolist())
+
                 st.session_state.df_resultado = res
                 st.session_state.tipo_reporte_activo = tipo_reporte
                 # Los binarios se generan respetando el diccionario de costos actual
