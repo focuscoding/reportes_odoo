@@ -37,8 +37,6 @@ def enviar_a_sheets(df_display, fecha_inicio, fecha_fin, apps_script_url, config
     for lab in labs:
         df_lab = df[df['laboratory_name'] == lab].copy()
         es_a_costo = config_costos.get(lab, False)
-        st.write(f"DEBUG {lab}: es_a_costo={es_a_costo}, config_costos={config_costos}")
-
 
         # Misma lógica que motor_split_laboratorios
         if es_a_costo:
@@ -63,6 +61,7 @@ def enviar_a_sheets(df_display, fecha_inicio, fecha_fin, apps_script_url, config
 
         moneda = str(df_lab['currency_id'].iloc[0]).lower().strip()
         total = df_lab['total_descuento'].sum()
+        st.write(f"DEBUG {lab}: valor_calculado muestra={df_lab['valor_calculado'].head(3).tolist()}, costo_lab={df_lab['costo_laboratorio'].head(3).tolist()}, price_unit={df_lab['price_unit'].head(3).tolist()}")
 
         es_usd = any(m in moneda for m in ['usd', 'dolar', '$'])
         monto_bs  = 0 if es_usd else round(total, 2)
@@ -508,8 +507,6 @@ def render_reporte(fecha_inicio, fecha_fin):
         )
 
         if st.button("📨 Enviar resumen NC a Sheets", type="primary"):
-            st.write("DEBUG config_costos:", st.session_state.config_costos)
-            st.write("DEBUG config_costos_aplicada:", st.session_state.config_costos_aplicada)
             if not apps_url:
                 st.error("Ingresa la URL del Apps Script.")
             else:
