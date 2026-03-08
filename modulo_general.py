@@ -37,6 +37,8 @@ def enviar_a_sheets(df_display, fecha_inicio, fecha_fin, apps_script_url, config
     for lab in labs:
         df_lab = df[df['laboratory_name'] == lab].copy()
         es_a_costo = config_costos.get(lab, False)
+        st.write(f"DEBUG {lab}: es_a_costo={es_a_costo}, config_costos={config_costos}")
+
 
         # Misma lógica que motor_split_laboratorios
         if es_a_costo:
