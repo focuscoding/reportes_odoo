@@ -393,6 +393,8 @@ def render_reporte(fecha_inicio, fecha_fin):
                     supplier_partner_ids = df_costs['supplier_partner_id'].dropna().astype(int).unique().tolist()
                     data_suppliers = client.search_read('res.partner', [('id', 'in', supplier_partner_ids)], ['id', 'comment'])
                     df_suppliers = pd.DataFrame(data_suppliers).rename(columns={'id': 'supplier_partner_id'})
+                    st.write("DEBUG df_suppliers muestra:", df_suppliers.head(10))
+                    st.write("DEBUG supplier_partner_ids:", supplier_partner_ids[:10])
                     df_costs = df_costs.merge(df_suppliers, on='supplier_partner_id', how='left')
                 
                 
