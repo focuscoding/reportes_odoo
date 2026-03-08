@@ -413,6 +413,14 @@ def render_reporte(fecha_inicio, fecha_fin):
                 df_final['partner_id_int'] = df_final['partner_id'].apply(lambda x: x[0] if isinstance(x, (list, tuple)) else None)
                 df_final = df_final.merge(df_partners, on='partner_id_int', how='left')
 
+                def limpiar_comment(val):
+                    if not val or val is False or str(val).strip() in ['False', 'None', 'nan', '']:
+                        return ''
+                    return str(val).strip()
+
+                df_final['comment'] = df_final['comment'].apply(limpiar_comment)
+
+
                 if tipo_reporte == "SELL-OUT" and not df_referencia.empty:
                     df_final['barcode_key_tmp'] = estandarizar_barcodes(df_final['barcode'])
                     
