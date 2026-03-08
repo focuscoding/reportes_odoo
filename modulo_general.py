@@ -485,6 +485,11 @@ def render_reporte(fecha_inicio, fecha_fin):
         
         with st.sidebar:
             st.header("⚙️ Configuración de Reporte")
+
+            #eliminar despues
+            if 'debug_comment' in st.session_state:
+                st.write("DEBUG comments por lab:", st.session_state.debug_comment)
+            #eliminar despues
             st.info("Seleccione los laboratorios que desea exportar a **COSTO**.")
             
             for lab in labs_encontrados:
@@ -513,10 +518,7 @@ def render_reporte(fecha_inicio, fecha_fin):
 
         st.dataframe(df_display, use_container_width=True)
 
-        #eliminar despues
-        if 'debug_comment' in st.session_state:
-            st.write("DEBUG comments por lab:", st.session_state.debug_comment)
-        #eliminar despues
+        
         st.divider()
         st.subheader("📤 Enviar resumen a Google Sheets")
 
