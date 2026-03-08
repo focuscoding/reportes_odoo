@@ -384,13 +384,20 @@ def render_reporte(fecha_inicio, fecha_fin):
                                                ['laboratory_name', 'supplier_code', 'barcode'])
                 df_prods = pd.DataFrame(data_prods).rename(columns={'id': 'product_id_int'})
 
-                data_costs = client.search_read('product.supplierinfo', [('product_tmpl_id', 'in', product_ids)], ['product_tmpl_id', 'price'])
+                data_costs = client.search_read('product.supplierinfo', [('product_tmpl_id', 'in', product_ids)], ['product_tmpl_id', 'price', 'partner_id'])
                 df_costs = pd.DataFrame(data_costs)
                 if not df_costs.empty:
                     df_costs['product_id_int'] = df_costs['product_tmpl_id'].apply(lambda x: x[0] if isinstance(x, (list, tuple)) else x)
+                    df_costs['supplier_partner_id'] = df_costs['partner_id'].apply(lambda x: x[0] if isinstance(x, (list, tuple)) else x)
                     df_costs = df_costs.rename(columns={'price': 'costo_proveedor'}).drop_duplicates('product_id_int')
+                    supplier_partner_ids = df_costs['supplier_partner_id'].dropna().astype(int).unique().tolist()
+                    data_suppliers = client.search_read('res.partner', [('id', 'in', supplier_partner_ids)], ['id', 'comment'])
+                    df_suppliers = pd.DataFrame(data_suppliers).rename(columns={'id': 'supplier_partner_id'})
+                    df_costs = df_costs.merge(df_suppliers, on='supplier_partner_id', how='left')
+                
+                
                 else:
-                    df_costs = pd.DataFrame(columns=['product_id_int', 'costo_proveedor'])
+                    df_costs = pd.DataFrame(columns=['product_id_int', 'costo_proveedor','comment'])
 
                 partner_ids_raw = list(set([m['partner_id'][0] for m in data_moves if isinstance(m.get('partner_id'), (list, tuple))]))
                 data_partners = client.search_read('res.partner', [('id', 'in', partner_ids_raw)], ['id', 'cadena'])
@@ -402,7 +409,7 @@ def render_reporte(fecha_inicio, fecha_fin):
 
                 df_final = df_lineas.merge(df_moves, on='move_id_int', how='left')
                 df_final = df_final.merge(df_prods, on='product_id_int', how='left')
-                df_final = df_final.merge(df_costs[['product_id_int', 'costo_proveedor']], on='product_id_int', how='left')
+                df_final = df_final.merge(df_costs[['product_id_int', 'costo_proveedor', 'comment']], on='product_id_int', how='left')
                 df_final['partner_id_int'] = df_final['partner_id'].apply(lambda x: x[0] if isinstance(x, (list, tuple)) else None)
                 df_final = df_final.merge(df_partners, on='partner_id_int', how='left')
 
@@ -442,6 +449,7 @@ def render_reporte(fecha_inicio, fecha_fin):
                     'quantity': df_final['quantity'],
                     'price_unit': df_final['price_unit'],
                     'costo_laboratorio': df_final['costo_proveedor'].fillna(0),
+                    'comment': df_final['comment'].fillna(''),
                     'descuento_valor': df_final['descuento_valor'] if 'descuento_valor' in df_final else 0,
                     'currency_id': df_final['currency_id'].apply(limpiar)
                 })
