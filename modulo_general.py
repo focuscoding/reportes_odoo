@@ -12,7 +12,7 @@ import requests
 def enviar_a_sheets(df_display, fecha_inicio, fecha_fin, apps_script_url, config_costos=None):
     config_costos = config_costos or {}
     CADENAS_PRECIO_FULL = ['farmago', 'farmatención']
-    concepto = f"SELL-OUT del {fecha_inicio.strftime('%d/%m/%Y')} al {fecha_fin.strftime('%d/%m/%Y')}"
+    concepto = f"Sell-Out del {fecha_inicio.strftime('%d/%m/%Y')} al {fecha_fin.strftime('%d/%m/%Y')} (en Panel)"
     
     meses_es = {
         'January': 'Enero', 'February': 'Febrero', 'March': 'Marzo',
@@ -61,7 +61,6 @@ def enviar_a_sheets(df_display, fecha_inicio, fecha_fin, apps_script_url, config
 
         moneda = str(df_lab['currency_id'].iloc[0]).lower().strip()
         total = df_lab['total_descuento'].sum()
-        st.write(f"DEBUG {lab}: valor_calculado muestra={df_lab['valor_calculado'].head(3).tolist()}, costo_lab={df_lab['costo_laboratorio'].head(3).tolist()}, price_unit={df_lab['price_unit'].head(3).tolist()}")
 
         es_usd = any(m in moneda for m in ['usd', 'dolar', '$'])
         monto_bs  = 0 if es_usd else round(total, 2)
