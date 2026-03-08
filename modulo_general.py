@@ -506,6 +506,8 @@ def render_reporte(fecha_inicio, fecha_fin):
         )
 
         if st.button("📨 Enviar resumen NC a Sheets", type="primary"):
+            st.write("DEBUG config_costos:", st.session_state.config_costos)
+            st.write("DEBUG config_costos_aplicada:", st.session_state.config_costos_aplicada)
             if not apps_url:
                 st.error("Ingresa la URL del Apps Script.")
             else:
