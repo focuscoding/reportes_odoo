@@ -461,7 +461,10 @@ def render_reporte(fecha_inicio, fecha_fin):
                     'descuento_valor': df_final['descuento_valor'] if 'descuento_valor' in df_final else 0,
                     'currency_id': df_final['currency_id'].apply(limpiar)
                 })
-
+                #ELIMINAR DESPUES
+                st.session_state.debug_comment = res[['laboratory_name', 'comment']].drop_duplicates('laboratory_name').to_dict('records')
+                #ELIMINAR DESPUES
+                               
                 st.session_state.df_resultado = res
                 st.session_state.tipo_reporte_activo = tipo_reporte
                 # Los binarios se generan respetando el diccionario de costos actual
@@ -509,7 +512,11 @@ def render_reporte(fecha_inicio, fecha_fin):
                 st.rerun()
 
         st.dataframe(df_display, use_container_width=True)
-        
+
+        #eliminar despues
+        if 'debug_comment' in st.session_state:
+            st.write("DEBUG comments por lab:", st.session_state.debug_comment)
+        #eliminar despues
         st.divider()
         st.subheader("📤 Enviar resumen a Google Sheets")
 
