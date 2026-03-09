@@ -384,44 +384,14 @@ def render_reporte(fecha_inicio, fecha_fin):
                                                ['laboratory_name', 'supplier_code', 'barcode'])
                 df_prods = pd.DataFrame(data_prods).rename(columns={'id': 'product_id_int'})
 
-                data_costs = client.search_read('product.supplierinfo', [('product_tmpl_id', 'in', product_ids)], ['product_tmpl_id', 'price', 'partner_id'])
+                data_costs = client.search_read('product.supplierinfo', [('product_tmpl_id', 'in', product_ids)], ['product_tmpl_id', 'price'])
                 df_costs = pd.DataFrame(data_costs)
                 if not df_costs.empty:
                     df_costs['product_id_int'] = df_costs['product_tmpl_id'].apply(lambda x: x[0] if isinstance(x, (list, tuple)) else x)
-                    df_costs['supplier_partner_id'] = df_costs['partner_id'].apply(lambda x: x[0] if isinstance(x, (list, tuple)) else x)
                     df_costs = df_costs.rename(columns={'price': 'costo_proveedor'}).drop_duplicates('product_id_int')
-                    supplier_partner_ids = df_costs['supplier_partner_id'].dropna().astype(int).unique().tolist()
-                    data_suppliers = client.search_read('res.partner', [('id', 'in', supplier_partner_ids)], ['id', 'comment'])
-                    df_suppliers = pd.DataFrame(data_suppliers).rename(columns={'id': 'supplier_partner_id'})
-                    df_costs = df_costs.merge(df_suppliers, on='supplier_partner_id', how='left')
-                    #eliminar
-                    barcodes_verificar = [
-                        '7591585118431', '7591585217172','3664798079999','769229220612', '7592601100621', '7703763301133', '7709031877546',
-                        '7592601301486', '7703763784738', '7703763306640', '7591585110800', '7591955001288',
-                        '7592454891240', '7703763791569', '7703763226054'
-                    ]
-                    
-                    # Traer barcodes de los productos para cruzar
-                    data_prods_debug = client.search_read(
-                        'product.product',
-                        [('barcode', 'in', barcodes_verificar)],
-                        ['id', 'barcode', 'laboratory_name']
-                    )
-                    df_prods_debug = pd.DataFrame(data_prods_debug)
-                    df_prods_debug = df_prods_debug.rename(columns={'id': 'product_id_int'})
-                    
-                    # Cruzar con df_costs para ver qué comment tiene cada uno
-                    df_debug_merge = df_prods_debug.merge(
-                        df_costs[['product_id_int', 'supplier_partner_id', 'comment']],
-                        on='product_id_int',
-                        how='left'
-                    )
-                    st.session_state.debug_barcodes = df_debug_merge.to_dict('records')    
-                
-                    #eliminar
-                
+                              
                 else:
-                    df_costs = pd.DataFrame(columns=['product_id_int', 'costo_proveedor','comment'])
+                    df_costs = pd.DataFrame(columns=['product_id_int', 'costo_proveedor'])
 
                 partner_ids_raw = list(set([m['partner_id'][0] for m in data_moves if isinstance(m.get('partner_id'), (list, tuple))]))
                 data_partners = client.search_read('res.partner', [('id', 'in', partner_ids_raw)], ['id', 'cadena'])
@@ -433,17 +403,9 @@ def render_reporte(fecha_inicio, fecha_fin):
 
                 df_final = df_lineas.merge(df_moves, on='move_id_int', how='left')
                 df_final = df_final.merge(df_prods, on='product_id_int', how='left')
-                df_final = df_final.merge(df_costs[['product_id_int', 'costo_proveedor', 'comment']], on='product_id_int', how='left')
+                df_final = df_final.merge(df_costs[['product_id_int', 'costo_proveedor']], on='product_id_int', how='left')
                 df_final['partner_id_int'] = df_final['partner_id'].apply(lambda x: x[0] if isinstance(x, (list, tuple)) else None)
                 df_final = df_final.merge(df_partners, on='partner_id_int', how='left')
-
-                def limpiar_comment(val):
-                    if not val or val is False or str(val).strip() in ['False', 'None', 'nan', '']:
-                        return ''
-                    return str(val).strip()
-
-                df_final['comment'] = df_final['comment'].apply(limpiar_comment)
-
 
                 if tipo_reporte == "SELL-OUT" and not df_referencia.empty:
                     df_final['barcode_key_tmp'] = estandarizar_barcodes(df_final['barcode'])
@@ -481,13 +443,10 @@ def render_reporte(fecha_inicio, fecha_fin):
                     'quantity': df_final['quantity'],
                     'price_unit': df_final['price_unit'],
                     'costo_laboratorio': df_final['costo_proveedor'].fillna(0),
-                    'comment': df_final['comment'].fillna(''),
                     'descuento_valor': df_final['descuento_valor'] if 'descuento_valor' in df_final else 0,
                     'currency_id': df_final['currency_id'].apply(limpiar)
                 })
-                #ELIMINAR DESPUES
-                st.session_state.debug_comment = res[['laboratory_name', 'comment']].drop_duplicates('laboratory_name').to_dict('records')
-                #ELIMINAR DESPUES
+                
                                
                 st.session_state.df_resultado = res
                 st.session_state.tipo_reporte_activo = tipo_reporte
@@ -512,11 +471,6 @@ def render_reporte(fecha_inicio, fecha_fin):
         with st.sidebar:
             st.header("⚙️ Configuración de Reporte")
 
-            #eliminar despues
-            if 'debug_barcodes' in st.session_state:
-                st.write("DEBUG barcodes:", st.session_state.debug_barcodes)
-
-            #eliminar despues
             st.info("Seleccione los laboratorios que desea exportar a **COSTO**.")
             
             for lab in labs_encontrados:
