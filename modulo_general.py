@@ -89,6 +89,47 @@ def enviar_a_sheets(df_display, fecha_inicio, fecha_fin, apps_script_url, config
 
     return resultados, errores
 
+def extraer_correos_html(html):
+    import re
+    if not html:
+        return []
+    correos = re.findall(r'[\w\.-]+@[\w\.-]+\.\w+', html)
+    return list(set(correos))
+
+def generar_mailto(lab, fecha_inicio, fecha_fin, comment_por_lab, cc_emails):
+    correos_to = extraer_correos_html(comment_por_lab.get(lab, ''))
+    
+    asunto = f"{lab} | Descuentos Sell-Out del {fecha_inicio.strftime('%d/%m/%Y')} al {fecha_fin.strftime('%d/%m/%Y')}"
+    
+    if 'leti' in lab.lower():
+        cuerpo = (
+            "Estimados señores, espero se encuentren bien.\n\n"
+            "Se envían los reportes con los descuentos aprobados durante el período indicado "
+            "para su reconocimiento a través de la nota de crédito correspondiente.\n\n"
+            "de no recibirse la nota en 5 días y habiendo cuentas por pagar vigentes, "
+            "se procederá a rebajarse el monto correspondiente en el pago.\n\n"
+            "Saludos,"
+        )
+    else:
+        cuerpo = (
+            "Estimados señores, espero se encuentren bien.\n\n"
+            "Se envían los reportes con los descuentos aprobados durante el período indicado "
+            "para su reconocimiento a través de la nota de crédito correspondiente.\n\n"
+            "Saludos,"
+        )
+
+    to = ','.join(correos_to)
+    cc = ','.join(cc_emails)
+    
+    mailto = (
+        f"mailto:{urllib.parse.quote(to)}"
+        f"?cc={urllib.parse.quote(cc)}"
+        f"&subject={urllib.parse.quote(asunto)}"
+        f"&body={urllib.parse.quote(cuerpo)}"
+    )
+    
+    return mailto, correos_to
+
 
 def estandarizar_barcodes(serie):
     return serie.astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
@@ -407,6 +448,31 @@ def render_reporte(fecha_inicio, fecha_fin):
                 df_final['partner_id_int'] = df_final['partner_id'].apply(lambda x: x[0] if isinstance(x, (list, tuple)) else None)
                 df_final = df_final.merge(df_partners, on='partner_id_int', how='left')
 
+
+                # ---- SECCIÓN EXTRAER LABORATORIO PARA CORREOS
+
+                lab_names = [x[1] if isinstance(x, (list, tuple)) else x 
+                             for x in df_final['laboratory_name'].dropna().unique()]
+                
+                data_lab_partners = client.search_read(
+                    'res.partner',
+                    [('name', 'in', lab_names)],
+                    ['id', 'name', 'comment']
+                )
+                df_lab_partners = pd.DataFrame(data_lab_partners)
+                
+                comment_por_lab = {}
+                for _, row in df_lab_partners.iterrows():
+                    comment = row['comment']
+                    if comment and comment is not False:
+                        comment_por_lab[row['name']] = str(comment).strip()
+                    else:
+                        comment_por_lab[row['name']] = ''
+                
+                st.session_state.comment_por_lab = comment_por_lab
+
+                # ---- SECCIÓN EXTRAER LABORATORIO PARA CORREOS
+
                 if tipo_reporte == "SELL-OUT" and not df_referencia.empty:
                     df_final['barcode_key_tmp'] = estandarizar_barcodes(df_final['barcode'])
                     
@@ -568,3 +634,27 @@ def render_reporte(fecha_inicio, fecha_fin):
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                 key=btn_key
                             )
+        if tipo_activo == 'SELL-OUT':
+            st.divider()
+            st.subheader("📧 Enviar correos a laboratorios")
+        
+            # ← AQUÍ colocas tus correos CC predeterminados
+            CC_EMAILS = [
+                "correo1@tuempresa.com",   # ← reemplazar
+                "correo2@tuempresa.com",   # ← reemplazar
+            ]
+        
+            comment_por_lab = st.session_state.get('comment_por_lab', {})
+        
+            for i in range(0, len(labs_encontrados), 3):
+                cols = st.columns(3)
+                for j in range(3):
+                    if i + j < len(labs_encontrados):
+                        lab = labs_encontrados[i + j]
+                        mailto, correos_to = generar_mailto(
+                            lab, fecha_inicio, fecha_fin, comment_por_lab, CC_EMAILS
+                        )
+                        tiene_correos = len(correos_to) > 0
+                        etiqueta = f"✉️ {lab}" if tiene_correos else f"⚠️ {lab} (sin correos)"
+                        with cols[j]:
+                            st.link_button(etiqueta, mailto, disabled=not tiene_correos)
