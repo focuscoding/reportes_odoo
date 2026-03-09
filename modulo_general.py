@@ -642,10 +642,18 @@ def render_reporte(fecha_inicio, fecha_fin):
             st.subheader("📧 Enviar correos a laboratorios")
         
             # ← AQUÍ colocas tus correos CC predeterminados
-            CC_EMAILS = [
-                "correo1@tuempresa.com",   # ← reemplazar
-                "correo2@tuempresa.com",   # ← reemplazar
+            CC_DEFAULT = [
+                "staddeo.blv@gmail.com",   # ← reemplazar
+                "staddeo@drogueriablv.com",   # ← reemplazar
             ]
+            
+            cc_input = st.text_input(
+                "CC adicionales (separados por coma)",
+                value=", ".join(CC_DEFAULT),
+                key="cc_emails_input"
+            )
+            
+            CC_EMAILS = [e.strip() for e in cc_input.split(",") if e.strip()]
         
             comment_por_lab = st.session_state.get('comment_por_lab', {})
         
