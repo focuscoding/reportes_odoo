@@ -395,7 +395,29 @@ def render_reporte(fecha_inicio, fecha_fin):
                     df_suppliers = pd.DataFrame(data_suppliers).rename(columns={'id': 'supplier_partner_id'})
                     df_costs = df_costs.merge(df_suppliers, on='supplier_partner_id', how='left')
                     #eliminar
-                    st.session_state.debug_costs_raw = df_costs[['product_id_int', 'supplier_partner_id', 'comment']].head(20).to_dict('records')
+                    barcodes_verificar = [
+                        '7591585118431', '3664798079999', '7703763301133', '7709031877546',
+                        '7592601301486', '7703763784738', '7703763306640', '7591585110800',
+                        '7592454891240', '7703763791569', '7703763226054'
+                    ]
+                    
+                    # Traer barcodes de los productos para cruzar
+                    data_prods_debug = client.search_read(
+                        'product.product',
+                        [('barcode', 'in', barcodes_verificar)],
+                        ['id', 'barcode', 'laboratory_name']
+                    )
+                    df_prods_debug = pd.DataFrame(data_prods_debug)
+                    df_prods_debug = df_prods_debug.rename(columns={'id': 'product_id_int'})
+                    
+                    # Cruzar con df_costs para ver qué comment tiene cada uno
+                    df_debug_merge = df_prods_debug.merge(
+                        df_costs[['product_id_int', 'supplier_partner_id', 'comment']],
+                        on='product_id_int',
+                        how='left'
+                    )
+                    st.session_state.debug_barcodes = df_debug_merge.to_dict('records')    
+                
                     #eliminar
                 
                 else:
@@ -491,10 +513,9 @@ def render_reporte(fecha_inicio, fecha_fin):
             st.header("⚙️ Configuración de Reporte")
 
             #eliminar despues
-            if 'debug_comment' in st.session_state:
-                st.write("DEBUG comments por lab:", st.session_state.debug_comment)
-            if 'debug_costs_raw' in st.session_state:
-                st.write("DEBUG costs raw:", st.session_state.debug_costs_raw)
+            if 'debug_barcodes' in st.session_state:
+                st.write("DEBUG barcodes:", st.session_state.debug_barcodes)
+
             #eliminar despues
             st.info("Seleccione los laboratorios que desea exportar a **COSTO**.")
             
