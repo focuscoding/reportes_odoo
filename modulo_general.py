@@ -482,11 +482,7 @@ def render_reporte(fecha_inicio, fecha_fin):
         df_display = st.session_state.df_resultado
         tipo_activo = st.session_state.tipo_reporte_activo 
 
-        #eliminar
-        if 'debug_costs_raw' in st.session_state:
-        st.write("DEBUG costs raw:", st.session_state.debug_costs_raw)
-        #eliminar
-
+        
         
         # SIDEBAR: Único lugar de configuración para laboratorios reales
         labs_encontrados = sorted(df_display['laboratory_name'].unique())
@@ -497,6 +493,8 @@ def render_reporte(fecha_inicio, fecha_fin):
             #eliminar despues
             if 'debug_comment' in st.session_state:
                 st.write("DEBUG comments por lab:", st.session_state.debug_comment)
+            if 'debug_costs_raw' in st.session_state:
+                st.write("DEBUG costs raw:", st.session_state.debug_costs_raw)
             #eliminar despues
             st.info("Seleccione los laboratorios que desea exportar a **COSTO**.")
             
