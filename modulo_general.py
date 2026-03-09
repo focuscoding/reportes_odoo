@@ -325,7 +325,7 @@ def motor_split_laboratorios(df_final, config_costos=None):
 
 # --- FUNCIÓN PRINCIPAL ---
 def render_reporte(fecha_inicio, fecha_fin):
-    st.header("🎯 Panel de Inteligencia Comercial")
+    st.header("🎯 Panel de Reportes")
     
     
 
@@ -360,7 +360,7 @@ def render_reporte(fecha_inicio, fecha_fin):
     
     tipo_reporte = st.radio(
         "Seleccione el tipo de análisis:",
-        ["Extracción General", "SELL-OUT", "Farmago", "Farmatención"],
+        ["SELL-OUT", "Extracción General"],
         horizontal=True,
         key="selector_principal"
     )
