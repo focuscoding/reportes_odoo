@@ -394,7 +394,9 @@ def render_reporte(fecha_inicio, fecha_fin):
                     data_suppliers = client.search_read('res.partner', [('id', 'in', supplier_partner_ids)], ['id', 'comment'])
                     df_suppliers = pd.DataFrame(data_suppliers).rename(columns={'id': 'supplier_partner_id'})
                     df_costs = df_costs.merge(df_suppliers, on='supplier_partner_id', how='left')
-                
+                    #eliminar
+                    st.session_state.debug_costs_raw = df_costs[['product_id_int', 'supplier_partner_id', 'comment']].head(20).to_dict('records')
+                    #eliminar
                 
                 else:
                     df_costs = pd.DataFrame(columns=['product_id_int', 'costo_proveedor','comment'])
@@ -479,6 +481,12 @@ def render_reporte(fecha_inicio, fecha_fin):
     if st.session_state.df_resultado is not None:
         df_display = st.session_state.df_resultado
         tipo_activo = st.session_state.tipo_reporte_activo 
+
+        #eliminar
+        if 'debug_costs_raw' in st.session_state:
+        st.write("DEBUG costs raw:", st.session_state.debug_costs_raw)
+        #eliminar
+
         
         # SIDEBAR: Único lugar de configuración para laboratorios reales
         labs_encontrados = sorted(df_display['laboratory_name'].unique())
