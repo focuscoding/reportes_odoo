@@ -451,8 +451,11 @@ def render_reporte(fecha_inicio, fecha_fin):
 
                 # ---- SECCIÓN EXTRAER LABORATORIO PARA CORREOS
 
-                lab_names = [x[1] if isinstance(x, (list, tuple)) else x 
-                             for x in df_final['laboratory_name'].dropna().unique()]
+                lab_names = []
+                for x in df_final['laboratory_name'].dropna():
+                    val = x[1] if isinstance(x, (list, tuple)) else x
+                    if val and val not in lab_names:
+                        lab_names.append(val)
                 
                 data_lab_partners = client.search_read(
                     'res.partner',
