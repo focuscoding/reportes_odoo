@@ -192,7 +192,7 @@ def render_reporte(fecha_inicio, fecha_fin):
                 gravado_abs = (df_raw_bd2["subtotal_discount_rate"] - df_raw_bd2["total_discount_rate"]).abs()
                 impuesto_abs = (df_raw_bd2["amount_tax"] / tasa).abs()
                 subtotal_abs = df_raw_bd2["subtotal_discount_rate"].abs()
-                exento_abs = (subtotal_abs - gravado_abs - impuesto_abs).clip(lower=0)
+                exento_abs = (subtotal_abs - gravado_abs - impuesto_abs -  df_raw_bd2["total_discount_rate"]).clip(lower=0)
                 
                 is_nc = df_raw_bd2["name"].str.contains("NC", case=False, na=False)
                 total_abs = pd.Series(0.0, index=df_raw_bd2.index)
