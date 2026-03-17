@@ -163,7 +163,8 @@ def render_reporte(fecha_inicio, fecha_fin):
                 ('invoice_date', '>=', str(fecha_inicio)),
                 ('invoice_date', '<=', str(fecha_fin)),
                 ('state', '=', 'posted'),
-                ('payment_state', '!=', 'reversed') # Nueva condición
+                ('payment_state', '!=', 'reversed'),
+                ('payment_state', '!=','paid')# Nueva condición
             ]
 
             fields_bd1 = ['name','invoice_date','invoice_number_next','partner_id',
