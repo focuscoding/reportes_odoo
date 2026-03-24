@@ -286,7 +286,7 @@ def motor_split_laboratorios(df_final, config_costos=None):
             worksheet.write_formula(
                 last_row,
                 12,
-                f"=SUM(L2:L{last_row})",
+                f"=SUM(M2:M{last_row})",
                 bold_format
             )
               
