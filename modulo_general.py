@@ -274,9 +274,9 @@ def motor_split_laboratorios(df_final, config_costos=None):
             # --- FORMATO DE COLUMNAS CON FÓRMULAS ---
             for row_num in range(len(reporte)):
                 # Col I = Precio (índice 8), Col H = Cantidad (índice 7)
-                worksheet.write_formula(row_num + 1, 11, f'=I{row_num + 2}*H{row_num + 2}')
+                worksheet.write_formula(row_num + 1, 11, f'=J{row_num + 2}*I{row_num + 2}')
                 # Col J = Descuento % (índice 9), Col K = Total (índice 10)
-                worksheet.write_formula(row_num + 1, 12, f'=J{row_num + 2}*K{row_num + 2}')
+                worksheet.write_formula(row_num + 1, 12, f'=K{row_num + 2}*L{row_num + 2}')
 
             # --- Totales
 
