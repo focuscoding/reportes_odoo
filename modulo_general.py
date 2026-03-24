@@ -223,6 +223,7 @@ def motor_split_laboratorios(df_final, config_costos=None):
         # Construcción de la estructura solicitada (Columnas A-J)
         reporte = pd.DataFrame({
             'invoice_date': df_lab['invoice_date'],
+            'partner_id_num': df_lab['partner_id_num'],
             'partner_id': df_lab['partner_id'],
             'invoice_number_next': df_lab['invoice_number_next'],
             'barcode': df_lab['barcode'],
@@ -258,11 +259,11 @@ def motor_split_laboratorios(df_final, config_costos=None):
 
             bold_format = workbook.add_format({'bold': True})
 
-            worksheet.set_column(9, 9, None, percent_format)
+            worksheet.set_column(10, 10, None, percent_format)
             
             # Encabezados personalizados
             encabezados = [
-                'Fecha Factura', 'Cliente', 'Nro. Factura', 'Código de Barras', 'Descripción', 
+                'Fecha Factura', 'ID Cliente', 'Cliente', 'Nro. Factura', 'Código de Barras', 'Descripción', 
                 'Laboratorio', 'Código Laboratorio', 'Cantidad', 'Precio', 'Descuento %', 
                 'Total', 'Monto NC'
             ]
@@ -273,18 +274,18 @@ def motor_split_laboratorios(df_final, config_costos=None):
             # --- FORMATO DE COLUMNAS CON FÓRMULAS ---
             for row_num in range(len(reporte)):
                 # Col I = Precio (índice 8), Col H = Cantidad (índice 7)
-                worksheet.write_formula(row_num + 1, 10, f'=I{row_num + 2}*H{row_num + 2}')
+                worksheet.write_formula(row_num + 1, 11, f'=I{row_num + 2}*H{row_num + 2}')
                 # Col J = Descuento % (índice 9), Col K = Total (índice 10)
-                worksheet.write_formula(row_num + 1, 11, f'=J{row_num + 2}*K{row_num + 2}')
+                worksheet.write_formula(row_num + 1, 12, f'=J{row_num + 2}*K{row_num + 2}')
 
             # --- Totales
 
             last_row = len(reporte) + 1
-            worksheet.write(last_row, 10, "Total NC", bold_format)
+            worksheet.write(last_row, 11, "Total NC", bold_format)
         
             worksheet.write_formula(
                 last_row,
-                11,
+                12,
                 f"=SUM(L2:L{last_row})",
                 bold_format
             )
@@ -293,22 +294,22 @@ def motor_split_laboratorios(df_final, config_costos=None):
             for row_num, moneda in enumerate(reporte["Moneda"], start=1):
                 fmt = dollar_format if str(moneda).lower() in ["usd", "dolares", "$"] else bs_format
                 #Aplica formato condicional a cada celda sin tocar su contenido
-                worksheet.conditional_format(row_num, 8, row_num, 8, {'type': 'no_errors', 'format': fmt})  # Col I
-                worksheet.conditional_format(row_num, 10, row_num, 10, {'type': 'no_errors', 'format': fmt}) # Col K
-                worksheet.conditional_format(row_num, 11, row_num, 11, {'type': 'no_errors', 'format': fmt}) # Col L
+                worksheet.conditional_format(row_num, 9, row_num, 9, {'type': 'no_errors', 'format': fmt})  # Col I
+                worksheet.conditional_format(row_num, 11, row_num, 11, {'type': 'no_errors', 'format': fmt}) # Col K
+                worksheet.conditional_format(row_num, 12, row_num, 12, {'type': 'no_errors', 'format': fmt}) # Col L
 
-            worksheet.conditional_format(last_row, 11, last_row, 11, {'type': 'no_errors', 'format': fmt})
+            worksheet.conditional_format(last_row, 12, last_row, 12, {'type': 'no_errors', 'format': fmt})
 
             # -- Ajuste anchos
             for i, col in enumerate(reporte.columns):
-                if i < 9:
+                if i < 10:
                     column_data = reporte[col].astype(str).fillna("")
                     max_len = max(column_data.map(len).max(), len(col))
                     worksheet.set_column(i, i, max_len + 2)
 
             # --- ajuste anchos 
-            for col in [10, 11]:
-                column_data = reporte['subtotal_bruto' if col == 10 else 'total_descuento']
+            for col in [11, 12]:
+                column_data = reporte['subtotal_bruto' if col == 11 else 'total_descuento']
 
                 column_data = column_data.fillna(0).astype(float)
 
@@ -502,6 +503,7 @@ def render_reporte(fecha_inicio, fecha_fin):
 
                 res = pd.DataFrame({
                     'invoice_date': pd.to_datetime(df_final['invoice_date']).dt.strftime('%d/%m/%Y'),
+                    'partner_id_num': df_final['partner_id'].apply(lambda x: x[0] if isinstance(x, (list, tuple)) else x),
                     'partner_id': df_final['partner_id'].apply(limpiar),
                     'cadena': df_final['cadena_val'].apply(lambda x: limpiar(x) if x else ""),
                     'invoice_number_next': df_final['invoice_number_next'],
